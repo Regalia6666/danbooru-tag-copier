@@ -1,3 +1,4 @@
+<img width="391" height="215" alt="Image" src="https://github.com/user-attachments/assets/65152dab-08dd-4ec5-b1ed-2dfb97076ad3" />
 # Danbooru Tag Copier
 
 ## 概要
