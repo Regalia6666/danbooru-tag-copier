@@ -1,4 +1,6 @@
 <img width="391" height="215" alt="Image" src="https://github.com/user-attachments/assets/65152dab-08dd-4ec5-b1ed-2dfb97076ad3" />
+
+
 ## 概要
 
 これは、画像掲示板サイト [Danbooru](https://danbooru.donmai.us/) の投稿ページでタグを簡単にコピーするためのGoogle Chrome拡張機能です。
