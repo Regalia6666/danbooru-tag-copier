@@ -1,21 +1,38 @@
 {
   "manifest_version": 3,
   "name": "Danbooru Tag Copier",
-  "version": "1.0",
-  "description": "Danbooruの投稿ページでコンテキストメニューから全てのタグをクリップボードにコピーします。",
+  "version": "2.0",
+  "description": "Danbooruの投稿ページでコンテキストメニューからタグをカテゴリ別に分類し、AIでさらに詳細に分類してコピーします。",
   "permissions": [
     "contextMenus",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "host_permissions": [
-    "*://danbooru.donmai.us/posts/*"
+    "*://danbooru.donmai.us/posts/*",
+    "https://generativelanguage.googleapis.com/"
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Danbooru Tag Copier Settings"
   },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["main.css"],
+      "matches": ["*://danbooru.donmai.us/*"]
+    }
+  ]
 }

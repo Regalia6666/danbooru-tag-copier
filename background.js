@@ -1,22 +1,15 @@
 /**
  * background.js
- * 
- * コンテキストメニューの作成と、クリック時のタグコピージョブの実行を担当します。
+ * (説明は省略)
  */
 
-// 拡張機能のインストール時や更新時にコンテキストメニューを（再）作成します。
+// 拡張機能のインストール/更新時にコンテキストメニューを再作成する
 chrome.runtime.onInstalled.addListener(() => {
-  // 既存のメニューを一度削除してから作成することで、重複によるエラーを防ぎます。
   chrome.contextMenus.remove("copyDanbooruTags", () => {
-    // コールバック内で lastError をチェックすることで "Unchecked runtime.lastError" を防ぎます。
-    if (chrome.runtime.lastError) {
-        // console.log('古いメニュー項目はありませんでした。');
-    }
-
-    // 新しいコンテキストメニューを作成します。
+    if (chrome.runtime.lastError) { /* No-op */ }
     chrome.contextMenus.create({
       id: "copyDanbooruTags",
-      title: "Danbooruタグをコピー (一般/キャラのみ)",
+      title: "Danbooruタグを分類してコピー",
       contexts: ["page", "image"],
       documentUrlPatterns: ["*://danbooru.donmai.us/posts/*"]
     });
@@ -25,99 +18,114 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // コンテキストメニューがクリックされたときの処理
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  // 作成したメニューがクリックされたか確認
   if (info.menuItemId === "copyDanbooruTags") {
-    // 現在のタブでスクリプトを実行
-    chrome.scripting.executeScript({
+    chrome.scripting.insertCSS({
       target: { tabId: tab.id },
-      function: copyTagsToClipboard // ページ上で実行する関数
+      files: ["main.css"]
+    }, () => {
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["content.js"]
+      });
     });
   }
 });
 
-/**
- * ページ上で実行され、タグをクリップボードにコピーする関数
- */
-function copyTagsToClipboard() {
+// ツールバーアイコンクリックでオプションページを開く
+chrome.action.onClicked.addListener((tab) => {
+  chrome.runtime.openOptionsPage();
+});
+
+// content.jsからのメッセージを待機
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === "classifyWithAI") {
+    classifyTags(request.tags)
+      .then(response => sendResponse({ success: true, data: response }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+});
+
+// Gemini APIにリクエストを送信する関数 (プロンプトを修正)
+async function classifyTags(tags) {
+  const { apiKey } = await chrome.storage.sync.get('apiKey');
+  if (!apiKey) {
+    throw new Error("APIキーが設定されていません。拡張機能のオプションページで設定してください。");
+  }
+
   // === ▼ 修正箇所 ▼ ===
-  /**
-   * ページ上にカスタム通知を表示し、自動で消す関数
-   * @param {string} message 表示するメッセージ
-   * @param {number} duration 表示時間（ミリ秒）。デフォルトは3000ms (3秒)。
-   */
-  function showNotification(message, duration = 3000) {
-    // 通知用のdiv要素を作成
-    const notification = document.createElement('div');
-    notification.textContent = message;
+  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
-    // スタイルを設定（画面右上に固定表示）
-    Object.assign(notification.style, {
-      position: 'fixed',
-      top: '20px',
-      right: '20px',
-      backgroundColor: 'rgba(28, 32, 37, 0.9)', // DanbooruのUIに合わせた色
-      color: 'white',
-      padding: '12px 20px',
-      borderRadius: '6px',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-      zIndex: '999999', // 他の要素より手前に表示
-      fontSize: '14px',
-      opacity: '0', // 初期状態は透明
-      transition: 'opacity 0.3s ease-in-out, transform 0.3s ease-in-out', // フェードイン/アウト効果
-      transform: 'translateY(-20px)'
+  const prompt = `
+あなたは、与えられたタグリストを特定のカテゴリに分類する専門家です。
+以下の「General Tags」を、指定されたカテゴリに分類し、結果を厳密なJSON形式で出力してください。
+
+# 制約条件
+- 出力は必ずJSONオブジェクトそのものだけにしてください。Markdownのコードブロック( \`\`\`json ... \`\`\` )や、その他の説明文は一切含めないでください。
+- 分類先のカテゴリ名は、指定された日本語のキー（「身体」「服装」など）をそのまま使用してください。
+- 各カテゴリに属するタグがない場合は、そのカテゴリのキー自体をJSONに含めないでください。
+- タグは元の英語のまま、配列（Array）に格納してください。
+
+# General Tags
+${tags.join(', ')}
+
+# 分類カテゴリとJSONのキー
+- 身体 (body): 髪, ヘアスタイル, 髪色, 顔, 目, 肩, 体, 胸, 手, 性器, 尻, 肌の色, 羽, しっぽ, 体型, 身体的特徴, など
+- 服装 (attire): 服, 帽子, 眼鏡等, ピアス, ドレス, 袖, ブラ, パンツ, 靴下など, 性交衣装, 裸, 水着, コスプレ, 衣装, 耳首・ネクタイ, 小物など
+- 構図 (composition): 姿勢, ジェスチャー, 動作, 表情, カメラワーク,など
+- 背景 (background): 場所, 祝日, ブランド名, 人物, 仕事など
+- その他 (misc): 漫画的表現, テキストなど
+
+# 出力形式のJSONスキーマ
+{
+  "body"?: string[],
+  "attire"?: string[],
+  "composition"?: string[],
+  "background"?: string[],
+  "misc"?: string[]
+}
+
+# 出力例
+{
+  "body": ["1girl", "ahoge", "brown hair", "pink eyes"],
+  "attire": ["backpack", "bag", "beret", "black hat", "jacket"],
+  "composition": ["blush", "sitting", "smile"],
+  "background": ["car interior", "gift", "happy birthday"],
+  "misc": ["english text"]
+}
+`;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+            temperature: 0.0, // 再現性を最大限に高める
+            response_mime_type: "application/json", // JSON出力を強制
+        }
+      })
     });
-
-    // bodyに要素を追加
-    document.body.appendChild(notification);
-
-    // 少し遅らせてからフェードインと移動アニメーションを開始
-    setTimeout(() => {
-      notification.style.opacity = '1';
-      notification.style.transform = 'translateY(0)';
-    }, 10);
-
-    // 指定時間後にフェードアウトして削除
-    setTimeout(() => {
-      notification.style.opacity = '0';
-      notification.style.transform = 'translateY(-20px)';
-      // transitionアニメーションが終わった後にDOMから要素を削除
-      notification.addEventListener('transitionend', () => {
-        notification.remove();
-      });
-    }, duration);
-  }
-
-  // タグリスト全体のセクションを取得
-  const tagListSection = document.getElementById('tag-list');
-  if (!tagListSection) {
-    showNotification('エラー: タグリストが見つかりませんでした。');
-    return;
-  }
-
-  // 「キャラクタータグ」と「一般タグ」のリスト内にあるタグ要素のみを選択します。
-  const tagElements = tagListSection.querySelectorAll(
-    '.character-tag-list li[data-tag-name], .general-tag-list li[data-tag-name]'
-  );
-  
-  // 各要素からタグ名 (data-tag-name) を抽出して配列にする
-  const tags = Array.from(tagElements).map(li => li.dataset.tagName);
-
-  if (tags.length === 0) {
-    showNotification('コピーするタグが見つかりませんでした。(一般/キャラタグなし)');
-    return;
-  }
-
-  // タグを「, 」(カンマ + 半角スペース)区切りの一つの文字列に結合
-  const tagString = tags.join(', ');
-
-  // 結合した文字列をクリップボードにコピー
-  navigator.clipboard.writeText(tagString).then(() => {
-    // 成功したことをユーザーにカスタム通知で知らせる
-    showNotification(`${tags.length}個のタグをクリップボードにコピーしました。`);
-  }).catch(err => {
-    // 失敗したことをユーザーに通知
-    console.error('タグのコピーに失敗しました:', err);
-    showNotification('エラー: タグのコピーに失敗しました。');
-  });
   // === ▲ 修正箇所 ▲ ===
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`APIエラー (ステータス: ${response.status}): ${errorData.error?.message || '不明なエラー'}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!text) {
+      throw new Error("APIからのレスポンス形式が不正です。");
+    }
+    
+    return text;
+
+  } catch (error) {
+    throw new Error(error.message || "ネットワークエラーが発生しました。");
+  }
 }
