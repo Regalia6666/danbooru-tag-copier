@@ -7,8 +7,7 @@
 コンテキストメニューから専用のUIを開き、タグをカテゴリ別に分類してコピーできます。さらに、**Gemini APIを利用して「一般タグ」を詳細な属性（身体、服装、構図など）に自動で分類する**、高度な機能を備えています。
 
 
-<img width="354" height="650" alt="Image" src="https://github.com/user-attachments/assets/833952b3-eeed-4aef-95fb-d4643b3294ec" />
-
+<img width="398" height="645" alt="Image" src="https://github.com/user-attachments/assets/5b729d14-0148-4d08-89a8-db834a17cbdc" />
 
 ## 主な機能
 
